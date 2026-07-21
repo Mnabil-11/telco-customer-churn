@@ -1,5 +1,7 @@
 # Telco Customer Churn Prediction
 
+[![CI](https://github.com/Mnabil-11/telco-customer-churn/actions/workflows/ci.yml/badge.svg)](https://github.com/Mnabil-11/telco-customer-churn/actions/workflows/ci.yml)
+
 A learning project: predict which telecom customers are likely to churn,
 built on top of SQL (not a plain CSV/DataFrame workflow) and covering the
 full path from raw data to a served model, including a business
