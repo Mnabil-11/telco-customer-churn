@@ -1,0 +1,10 @@
+venv/
+data/
+notebooks/
+src/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+PROJECT_LOG.md
+README.md

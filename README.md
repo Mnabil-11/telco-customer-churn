@@ -86,3 +86,16 @@ Response:
 
 Pass `?threshold=0.05` to use the business-optimal cutoff from the
 sensitivity analysis instead of the default 0.5.
+
+## Running the API with Docker
+
+The image only needs `app/`, `models/`, and `requirements-api.txt` (a
+lighter dependency set than the full pipeline's `requirements.txt`).
+
+```bash
+docker build -t telco-churn-api .
+docker run -d -p 8000:8000 --name telco-churn-api telco-churn-api
+```
+
+Same `/health` and `/predict` endpoints as above, now served from the
+container on port 8000.
