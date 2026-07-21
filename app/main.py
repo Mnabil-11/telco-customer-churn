@@ -24,6 +24,27 @@ NOMINAL_COLS = [
     "PaymentMethod",
 ]
 
+# The exact category set seen at training time for each nominal column, so a
+# single-customer request always produces the same one-hot columns that
+# pd.get_dummies produced over the full training set (see encode_customer).
+NOMINAL_CATEGORIES = {
+    "MultipleLines": ["No", "No phone service", "Yes"],
+    "InternetService": ["DSL", "Fiber optic", "No"],
+    "OnlineSecurity": ["No", "No internet service", "Yes"],
+    "OnlineBackup": ["No", "No internet service", "Yes"],
+    "DeviceProtection": ["No", "No internet service", "Yes"],
+    "TechSupport": ["No", "No internet service", "Yes"],
+    "StreamingTV": ["No", "No internet service", "Yes"],
+    "StreamingMovies": ["No", "No internet service", "Yes"],
+    "Contract": ["Month-to-month", "One year", "Two year"],
+    "PaymentMethod": [
+        "Bank transfer (automatic)",
+        "Credit card (automatic)",
+        "Electronic check",
+        "Mailed check",
+    ],
+}
+
 DEFAULT_THRESHOLD = 0.5
 
 app = FastAPI(title="Telco Customer Churn API")
@@ -69,6 +90,12 @@ def encode_customer(customer: CustomerInput) -> pd.DataFrame:
 
     for col in BINARY_COLS:
         row[col] = row[col].map(BINARY_MAP)
+
+    # fix each nominal column's categories to the full training-time set so
+    # get_dummies always yields the same columns, regardless of which single
+    # value this one customer happens to have
+    for col, categories in NOMINAL_CATEGORIES.items():
+        row[col] = pd.Categorical(row[col], categories=categories)
 
     row = pd.get_dummies(row, columns=NOMINAL_COLS, drop_first=True)
 

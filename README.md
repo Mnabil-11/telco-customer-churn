@@ -85,7 +85,7 @@ curl -X POST "http://127.0.0.1:8000/predict" \
 Response:
 
 ```json
-{"churn_probability": 0.29, "churn_prediction": false, "threshold_used": 0.5}
+{"churn_probability": 0.65, "churn_prediction": true, "threshold_used": 0.5}
 ```
 
 Pass `?threshold=0.05` to use the business-optimal cutoff from the
@@ -103,3 +103,13 @@ docker run -d -p 8000:8000 --name telco-churn-api telco-churn-api
 
 Same `/health` and `/predict` endpoints as above, now served from the
 container on port 8000.
+
+## Running Tests
+
+```bash
+./venv/Scripts/pip install -r requirements-dev.txt
+./venv/Scripts/python.exe -m pytest tests/ -v
+```
+
+Covers `/health`, `/predict` (happy path, threshold behavior, all input
+validation bounds), and `encode_customer` in isolation.

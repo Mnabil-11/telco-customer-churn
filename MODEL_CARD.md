@@ -121,6 +121,28 @@ than treating 55% Recall as acceptable.
 
 ## Known Failure Modes / Limitations
 
+- **[Fixed] Single-request one-hot encoding bug (found via unit tests,
+  `tests/test_api.py`).** `encode_customer` used to call
+  `pd.get_dummies(..., drop_first=True)` directly on a single-row
+  DataFrame. Since a lone request only ever has *one* value per nominal
+  column, pandas treated that single value as "the only category" and
+  dropped it as the baseline — regardless of whether it matched the
+  actual training-time baseline. Concretely, a customer with
+  `InternetService="Fiber optic"` and `PaymentMethod="Electronic check"`
+  had *both* encoded as all-zero (i.e. silently treated as `DSL` and
+  `Bank transfer (automatic)`, the true training baselines) instead of
+  their real values. This was serious: the same test customer's predicted
+  churn probability changed from **29.0% (wrong) to 64.9% (correct)**
+  once fixed. **Importantly, this bug was confined to the live `/predict`
+  encoding path** — Stages 5-7 (model training, evaluation, business
+  framing) all ran `get_dummies` over the full 7,043-row dataset at once,
+  where every category is naturally present, so those results are
+  unaffected. Fix: nominal columns are now cast to `pd.Categorical` with
+  the exact training-time category list (`NOMINAL_CATEGORIES` in
+  `app/main.py`) before encoding, so a single request always produces the
+  same columns regardless of which value it has. This is also documented
+  as the motivating case for adding `tests/test_api.py` in the first
+  place — it was caught by a unit test, not manual testing.
 - **Extrapolation beyond training range.** Manual testing surfaced that
   `MonthlyCharges=0` (a value with no real analog in training data, where
   the observed minimum was ~$18.25) produced an unreliable prediction
