@@ -5,6 +5,10 @@ built on top of SQL (not a plain CSV/DataFrame workflow) and covering the
 full path from raw data to a served model, including a business
 cost-benefit analysis.
 
+See [MODEL_CARD.md](MODEL_CARD.md) for the technical writeup of model
+selection, decision-threshold rationale, class-imbalance handling, and
+known limitations.
+
 ## Dataset
 
 [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn)
