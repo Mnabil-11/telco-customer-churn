@@ -8,7 +8,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-from business_framing import net_benefit
+try:
+    from business_framing import net_benefit  # running as a script: python src/sensitivity_analysis.py
+except ImportError:
+    from src.business_framing import net_benefit  # imported as a package, e.g. from tests
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "churn.db"
 FIG_DIR = Path(__file__).resolve().parent.parent / "notebooks" / "figures"

@@ -112,12 +112,77 @@ supplied by the caller.
 
 ## Evaluation
 
-See the Model Comparison table above for headline numbers. Full confusion
-matrices are in `notebooks/figures/confusion_matrices.png`. Key caveat:
-even the best model misses ~45% of actual churners at the 0.5 threshold
-(Recall 0.55) — this is a real limitation, not just a tuning artifact, and
-is the direct motivation for the threshold-lowering strategy above rather
-than treating 55% Recall as acceptable.
+See the Model Comparison table above for headline numbers (both at the
+default 0.5 threshold). Full confusion matrices are in
+`notebooks/figures/confusion_matrices.png`.
+
+**At threshold 0.5, the model misses ~45% of actual churners (Recall
+0.55) — this is exactly why the business-optimal threshold (Stage 7)
+is far lower than 0.5, not an incidental detail.** A False Negative here
+means a customer we never even attempted to retain; the cost-benefit
+analysis in `src/business_framing.py` showed that because the retention
+offer is cheap relative to the value of keeping a customer, it's worth
+tolerating far more false alarms in exchange for catching almost all real
+churners. The table below makes that trade-off concrete, computed on the
+same test split (`random_state=42`) used throughout Stages 5-6:
+
+| Metric (Churn class) | Threshold 0.5 (default) | Threshold 0.05 (business-recommended) |
+|---|---|---|
+| Confusion matrix `[[TN, FP], [FN, TP]]` | `[[918, 117], [168, 206]]` | `[[370, 665], [6, 368]]` |
+| Precision | 0.638 | 0.356 |
+| **Recall** | **0.551** | **0.984** |
+| F1 | 0.591 | 0.523 |
+| Overall accuracy | 0.798 | 0.524 |
+
+Lowering the threshold to 0.05 catches 368 of 374 actual churners
+(Recall 98.4%, missing only 6) at the cost of 665 false alarms (Precision
+drops to 35.6%) and a much lower overall accuracy (52.4%). This looks
+like a worse model by traditional ML metrics — but per the cost model in
+Stage 7, it is the more profitable operating point, because a missed
+churner is far more expensive than an unnecessary retention offer. This
+is the clearest illustration in the whole project of why accuracy (and
+even F1) can point to a different answer than what's actually optimal
+for the business.
+
+## Model Interpretability (SHAP)
+
+`src/shap_analysis.py` computes exact Shapley values for the deployed
+Logistic Regression via `shap.LinearExplainer` (closed-form for linear
+models, no sampling approximation needed), against a 100-row background
+sample of scaled training data. This generalizes the manual
+coefficient-decomposition done during debugging (see the fixed
+`MonthlyCharges` sign-flip note below) into a proper, model-agnostic
+framework — the same approach works for the tree-based models too, not
+just linear ones.
+
+**Global feature importance** (`notebooks/figures/shap_global_importance.png`,
+mean |SHAP value| across the test set) confirms the same top drivers found
+independently via SQL/EDA in Stages 2-3: `InternetService_Fiber optic`,
+`MonthlyCharges`, `tenure`, and `Contract` dominate. The beeswarm plot
+(`shap_beeswarm.png`) adds *direction*: it shows visually that high
+`MonthlyCharges` (red dots) cluster on the *negative* SHAP side (pushing
+away from churn) while low `MonthlyCharges` (blue dots) push toward
+churn — a direct visual confirmation of the multicollinearity-driven sign
+flip described below, this time with no manual coefficient math required.
+
+**Individual explanations** (`shap_waterfall_lowest_risk.png`,
+`shap_waterfall_highest_risk.png`) show the same customer-by-customer
+breakdown as before, but now derived from a principled method rather than
+`coefficient × scaled_value` by hand. The highest-risk test customer
+(87% predicted churn probability) is driven up mainly by low `tenure`
+(+1.05) and `InternetService_Fiber optic` (+0.82), while — again — a
+high `MonthlyCharges` value pulls the prediction *down* (-0.84) despite
+being a "risky-looking" number in isolation.
+
+**Served live via `/explain`:** the same `LinearExplainer`, built once at
+API startup against a background sample saved by
+`src/train_final_model.py` (`models/shap_background.joblib`), powers a
+`/explain` endpoint (see `app/main.py`) that takes the same
+`CustomerInput` payload as `/predict` and returns every feature's SHAP
+contribution plus the base value, sorted by magnitude. This means the
+kind of manual debugging done in Session 11 (decomposing one prediction
+by hand to understand a borderline case) is now a first-class,
+always-available API capability instead of an ad hoc investigation.
 
 ## Known Failure Modes / Limitations
 
@@ -143,6 +208,17 @@ than treating 55% Recall as acceptable.
   same columns regardless of which value it has. This is also documented
   as the motivating case for adding `tests/test_api.py` in the first
   place — it was caught by a unit test, not manual testing.
+- **[Fixed] SHAP background sample size not bounded by dataset size
+  (found via the pipeline integration test, `tests/test_pipeline.py`).**
+  `src/train_final_model.py` sampled a fixed `SHAP_BACKGROUND_SIZE=100`
+  rows for the `/explain` endpoint's background distribution via
+  `rng.choice(..., replace=False)`. This works fine on the real
+  7,043-row dataset but raises `ValueError` on any dataset smaller than
+  100 rows (e.g. the test suite's 60-row synthetic dataset) since you
+  can't sample more rows than exist without replacement. Fixed by
+  capping the sample size to `min(SHAP_BACKGROUND_SIZE, len(X_scaled))`.
+  Doesn't change behavior on the real dataset at all — purely a
+  robustness fix the smaller test dataset happened to expose.
 - **Extrapolation beyond training range.** Manual testing surfaced that
   `MonthlyCharges=0` (a value with no real analog in training data, where
   the observed minimum was ~$18.25) produced an unreliable prediction

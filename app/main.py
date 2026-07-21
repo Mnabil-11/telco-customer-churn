@@ -3,6 +3,7 @@ from typing import Literal
 
 import joblib
 import pandas as pd
+import shap
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -52,6 +53,12 @@ app = FastAPI(title="Telco Customer Churn API")
 model = joblib.load(MODELS_DIR / "churn_model.joblib")
 scaler = joblib.load(MODELS_DIR / "scaler.joblib")
 feature_columns = joblib.load(MODELS_DIR / "feature_columns.joblib")
+shap_background = joblib.load(MODELS_DIR / "shap_background.joblib")
+
+# LinearExplainer computes exact Shapley values for a linear model in closed
+# form against this background sample of scaled training rows (see
+# src/train_final_model.py) - no per-request retraining or sampling needed.
+explainer = shap.LinearExplainer(model, shap_background)
 
 
 class CustomerInput(BaseModel):
@@ -83,6 +90,17 @@ class PredictionResponse(BaseModel):
     churn_probability: float
     churn_prediction: bool
     threshold_used: float
+
+
+class FeatureContribution(BaseModel):
+    feature: str
+    shap_value: float
+
+
+class ExplanationResponse(BaseModel):
+    churn_probability: float
+    base_value: float
+    contributions: list[FeatureContribution]
 
 
 def encode_customer(customer: CustomerInput) -> pd.DataFrame:
@@ -119,4 +137,26 @@ def predict(customer: CustomerInput, threshold: float = DEFAULT_THRESHOLD) -> Pr
         churn_probability=probability,
         churn_prediction=probability >= threshold,
         threshold_used=threshold,
+    )
+
+
+@app.post("/explain", response_model=ExplanationResponse)
+def explain(customer: CustomerInput, top_n: int | None = None) -> ExplanationResponse:
+    row = encode_customer(customer)
+    row_scaled = scaler.transform(row)
+    probability = float(model.predict_proba(row_scaled)[0, 1])
+
+    shap_values = explainer.shap_values(row_scaled)[0]
+    contributions = sorted(
+        zip(feature_columns, shap_values), key=lambda pair: abs(pair[1]), reverse=True
+    )
+    if top_n is not None:
+        contributions = contributions[:top_n]
+
+    return ExplanationResponse(
+        churn_probability=probability,
+        base_value=float(explainer.expected_value),
+        contributions=[
+            FeatureContribution(feature=name, shap_value=float(value)) for name, value in contributions
+        ],
     )

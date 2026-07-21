@@ -85,6 +85,54 @@ def test_predict_custom_threshold_changes_prediction() -> None:
     assert high_threshold_response.json()["churn_prediction"] is False
 
 
+# --- /explain (SHAP) ---
+
+
+def test_explain_returns_expected_shape() -> None:
+    response = client.post("/explain", json=VALID_CUSTOMER)
+    assert response.status_code == 200
+
+    body = response.json()
+    assert set(body.keys()) == {"churn_probability", "base_value", "contributions"}
+    assert isinstance(body["base_value"], float)
+    assert len(body["contributions"]) == len(feature_columns)
+    for item in body["contributions"]:
+        assert set(item.keys()) == {"feature", "shap_value"}
+        assert item["feature"] in feature_columns
+
+
+def test_explain_contributions_sum_to_the_logit() -> None:
+    import math
+
+    response = client.post("/explain", json=VALID_CUSTOMER).json()
+    total = response["base_value"] + sum(c["shap_value"] for c in response["contributions"])
+    expected_probability = 1 / (1 + math.exp(-total))
+
+    assert expected_probability == pytest.approx(response["churn_probability"], abs=1e-6)
+
+
+def test_explain_respects_top_n() -> None:
+    response = client.post("/explain", json=VALID_CUSTOMER, params={"top_n": 5}).json()
+    assert len(response["contributions"]) == 5
+
+
+def test_explain_contributions_sorted_by_absolute_value_descending() -> None:
+    response = client.post("/explain", json=VALID_CUSTOMER).json()
+    magnitudes = [abs(c["shap_value"]) for c in response["contributions"]]
+    assert magnitudes == sorted(magnitudes, reverse=True)
+
+
+def test_explain_matches_predict_probability() -> None:
+    predict_prob = client.post("/predict", json=VALID_CUSTOMER).json()["churn_probability"]
+    explain_prob = client.post("/explain", json=VALID_CUSTOMER).json()["churn_probability"]
+    assert predict_prob == pytest.approx(explain_prob, abs=1e-9)
+
+
+def test_explain_rejects_same_invalid_input_as_predict() -> None:
+    response = client.post("/explain", json=customer(tenure=-5))
+    assert response.status_code == 422
+
+
 # --- /predict: validation ---
 
 
