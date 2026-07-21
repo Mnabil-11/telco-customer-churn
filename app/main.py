@@ -4,7 +4,7 @@ from typing import Literal
 import joblib
 import pandas as pd
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
@@ -53,7 +53,7 @@ class CustomerInput(BaseModel):
     PaymentMethod: Literal[
         "Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"
     ]
-    MonthlyCharges: float
+    MonthlyCharges: float = Field(gt=0, description="Must be a positive amount")
 
 
 class PredictionResponse(BaseModel):
