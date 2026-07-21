@@ -38,7 +38,7 @@ class CustomerInput(BaseModel):
     SeniorCitizen: Literal[0, 1]
     Partner: Literal["Yes", "No"]
     Dependents: Literal["Yes", "No"]
-    tenure: int
+    tenure: int = Field(ge=0, le=72, description="Months, matches the training data range (0-72)")
     PhoneService: Literal["Yes", "No"]
     MultipleLines: Literal["Yes", "No", "No phone service"]
     InternetService: Literal["DSL", "Fiber optic", "No"]
@@ -53,7 +53,9 @@ class CustomerInput(BaseModel):
     PaymentMethod: Literal[
         "Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"
     ]
-    MonthlyCharges: float = Field(gt=0, description="Must be a positive amount")
+    MonthlyCharges: float = Field(
+        gt=0, le=150, description="Matches the training data range (max observed was ~$118.75)"
+    )
 
 
 class PredictionResponse(BaseModel):
