@@ -7,3 +7,6 @@ seaborn
 notebook
 ipykernel
 sqlalchemy
+fastapi
+uvicorn[standard]
+joblib
